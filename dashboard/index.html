@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IoT Drainage Monitor – Real-Time Dashboard</title>
+  <meta name="description" content="Real-time IoT monitoring dashboard for roadside water drainage and purification system. Track rainfall, water levels, purifier status, and flow rates." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <style>
+    /* ── DESIGN TOKENS ─────────────────────────────── */
+    :root {
+      --bg-base:        #060b14;
+      --bg-surface:     #0d1628;
+      --bg-card:        rgba(255,255,255,0.04);
+      --bg-card-hover:  rgba(255,255,255,0.07);
+      --border:         rgba(255,255,255,0.08);
+      --border-bright:  rgba(255,255,255,0.15);
+      --accent-blue:    #3b82f6;
+      --accent-cyan:    #06b6d4;
+      --accent-teal:    #14b8a6;
+      --accent-green:   #22c55e;
+      --accent-yellow:  #f59e0b;
+      --accent-red:     #ef4444;
+      --accent-purple:  #8b5cf6;
+      --safe-color:     #22c55e;
+      --warn-color:     #f59e0b;
+      --danger-color:   #ef4444;
+      --text-primary:   #f1f5f9;
+      --text-secondary: #94a3b8;
+      --text-muted:     #475569;
+      --radius-sm:  8px;
+      --radius-md: 16px;
+      --radius-lg: 24px;
+      --glass: rgba(255,255,255,0.04);
+      --glass-border: rgba(255,255,255,0.10);
+    }
+
+    /* ── RESET ─────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg-base);
+      color: var(--text-primary);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── ANIMATED BACKGROUND ───────────────────────── */
+    .bg-orbs { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+    .bg-orbs::before {
+      content: '';
+      position: absolute; top: -20%; left: -10%;
+      width: 600px; height: 600px; border-radius: 50%;
+      background: radial-gradient(circle, rgba(59,130,246,0.12) 0%, transparent 70%);
+      animation: orbFloat 15s ease-in-out infinite alternate;
+    }
+    .bg-orbs::after {
+      content: '';
+      position: absolute; bottom: -10%; right: -10%;
+      width: 500px; height: 500px; border-radius: 50%;
+      background: radial-gradient(circle, rgba(20,184,166,0.10) 0%, transparent 70%);
+      animation: orbFloat 20s ease-in-out infinite alternate-reverse;
+    }
+    @keyframes orbFloat {
+      0%   { transform: translate(0,0) scale(1); }
+      100% { transform: translate(40px,60px) scale(1.15); }
+    }
+
+    /* ── LAYOUT ────────────────────────────────────── */
+    .wrapper {
+      position: relative; z-index: 1;
+      max-width: 1400px; margin: 0 auto; padding: 24px 20px 60px;
+    }
+
+    /* ── HEADER ────────────────────────────────────── */
+    header {
+      display: flex; align-items: center; justify-content: space-between;
+      flex-wrap: wrap; gap: 16px; margin-bottom: 32px;
+      padding: 20px 28px;
+      background: var(--glass); border: 1px solid var(--glass-border);
+      border-radius: var(--radius-lg); backdrop-filter: blur(20px);
+    }
+    .header-left  { display: flex; align-items: center; gap: 16px; }
+    .header-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .logo {
+      width: 48px; height: 48px;
+      background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+      border-radius: var(--radius-sm);
+      display: flex; align-items: center; justify-content: center; font-size: 22px;
+    }
+    .header-title h1 {
+      font-size: 1.25rem; font-weight: 700;
+      background: linear-gradient(135deg, #f1f5f9, var(--accent-cyan));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    }
+    .header-title p { font-size: 0.75rem; color: var(--text-secondary); margin-top: 2px; }
+
+    .connection-badge {
+      display: flex; align-items: center; gap: 8px; padding: 8px 16px;
+      border-radius: 100px; font-size: 0.8rem; font-weight: 500; border: 1px solid;
+      transition: all 0.4s;
+    }
+    .connection-badge.connected { background: rgba(34,197,94,0.1); border-color: rgba(34,197,94,0.3); color: var(--safe-color); }
+    .connection-badge.disconnected { background: rgba(239,68,68,0.1); border-color: rgba(239,68,68,0.3); color: var(--danger-color); }
+    .connection-badge.demo { background: rgba(245,158,11,0.1); border-color: rgba(245,158,11,0.3); color: var(--warn-color); }
+    .connection-badge.connecting { background: rgba(59,130,246,0.1); border-color: rgba(59,130,246,0.3); color: var(--accent-blue); }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; animation: pulseDot 2s ease infinite; }
+    @keyframes pulseDot { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(0.8)} }
+
+    .ws-config { display: flex; gap: 8px; align-items: center; }
+    .ws-config input {
+      background: rgba(255,255,255,0.05); border: 1px solid var(--border);
+      color: var(--text-primary); padding: 7px 12px; border-radius: var(--radius-sm);
+      font-size: 0.78rem; font-family: 'JetBrains Mono', monospace; width: 160px;
+      outline: none; transition: border-color 0.2s;
+    }
+    .ws-config input:focus { border-color: var(--accent-blue); }
+    .btn { padding: 8px 16px; border-radius: var(--radius-sm); font-size: 0.78rem; font-weight: 600; cursor: pointer; border: none; transition: all 0.2s; }
+    .btn-primary { background: linear-gradient(135deg, var(--accent-blue), var(--accent-cyan)); color: #fff; }
+    .btn-primary:hover { opacity: 0.85; transform: translateY(-1px); }
+    .btn-demo { background: rgba(245,158,11,0.15); border: 1px solid rgba(245,158,11,0.3); color: var(--warn-color); }
+    .btn-demo:hover { background: rgba(245,158,11,0.25); }
+
+    /* ── BLOCKAGE ALERT BANNER ─────────────────────── */
+    .alert-banner {
+      display: none; align-items: center; gap: 12px; padding: 16px 24px;
+      border-radius: var(--radius-md); margin-bottom: 24px;
+      background: rgba(239,68,68,0.12); border: 1px solid rgba(239,68,68,0.4);
+      animation: alertPulse 2s ease infinite;
+    }
+    .alert-banner.visible { display: flex; }
+    @keyframes alertPulse {
+      0%,100% { border-color: rgba(239,68,68,0.4); box-shadow: 0 0 0 0 rgba(239,68,68,0); }
+      50%     { border-color: rgba(239,68,68,0.8); box-shadow: 0 0 20px rgba(239,68,68,0.2); }
+    }
+    .alert-icon { font-size: 1.5rem; }
+    .alert-text strong { color: var(--danger-color); font-weight: 700; }
+    .alert-text p { font-size: 0.82rem; color: var(--text-secondary); margin-top: 2px; }
+
+    /* ── SENSOR CARDS GRID ─────────────────────────── */
+    .cards-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; margin-bottom: 24px; }
+
+    /* ── GLASS CARD ────────────────────────────────── */
+    .card {
+      background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg);
+      padding: 28px; backdrop-filter: blur(20px); transition: transform 0.25s, border-color 0.4s, background 0.4s, box-shadow 0.4s;
+      position: relative; overflow: hidden;
+    }
+    .card::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+      border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+      background: var(--card-accent, transparent); transition: background 0.4s;
+    }
+    .card:hover { transform: translateY(-4px); background: var(--bg-card-hover); border-color: var(--border-bright); }
+    .card.state-danger  { border-color: rgba(239,68,68,0.4); box-shadow: 0 0 30px rgba(239,68,68,0.15); }
+    .card.state-warning { border-color: rgba(245,158,11,0.3); box-shadow: 0 0 20px rgba(245,158,11,0.10); }
+
+    .card-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 24px; }
+    .card-icon-wrap {
+      width: 48px; height: 48px; border-radius: var(--radius-sm);
+      display: flex; align-items: center; justify-content: center; font-size: 22px;
+      background: var(--icon-bg, rgba(59,130,246,0.15)); border: 1px solid var(--icon-border, rgba(59,130,246,0.3));
+    }
+    .card-title { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); }
+
+    .status-badge {
+      padding: 4px 12px; border-radius: 100px; font-size: 0.72rem; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.06em; border: 1px solid; transition: all 0.4s;
+    }
+    .badge-safe    { background: rgba(34,197,94,0.12);  border-color: rgba(34,197,94,0.35);  color: var(--safe-color); }
+    .badge-warning { background: rgba(245,158,11,0.12); border-color: rgba(245,158,11,0.35); color: var(--warn-color); }
+    .badge-danger  { background: rgba(239,68,68,0.12);  border-color: rgba(239,68,68,0.35);  color: var(--danger-color); }
+    .badge-info    { background: rgba(59,130,246,0.12); border-color: rgba(59,130,246,0.35); color: var(--accent-blue); }
+    .badge-neutral { background: rgba(148,163,184,0.12);border-color:rgba(148,163,184,0.35); color: var(--text-secondary); }
+
+    .card-value  { font-size: 3rem; font-weight: 800; line-height: 1; margin-bottom: 8px; transition: color 0.4s; }
+    .card-unit   { font-size: 0.85rem; font-weight: 500; color: var(--text-secondary); }
+    .card-sub    { font-size: 0.78rem; color: var(--text-muted); margin-top: 6px; }
+
+    /* Rain drops animation */
+    .rain-drops { display: flex; gap: 6px; margin-top: 16px; }
+    .rain-drop  { width: 6px; border-radius: 100px; background: var(--accent-blue); opacity: 0.2; transition: opacity 0.5s; }
+
+    /* Water level gauge */
+    .level-gauge-wrap { margin-top: 16px; }
+    .level-gauge-track { height: 10px; background: rgba(255,255,255,0.06); border-radius: 100px; overflow: hidden; }
+    .level-gauge-fill {
+      height: 100%; border-radius: 100px;
+      background: linear-gradient(90deg, var(--safe-color), var(--warn-color), var(--danger-color));
+      transition: width 0.7s cubic-bezier(0.4,0,0.2,1); width: 0%;
+    }
+    .level-gauge-labels { display: flex; justify-content: space-between; font-size: 0.65rem; color: var(--text-muted); margin-top: 4px; }
+    .thresholds { display: flex; gap: 12px; margin-top: 14px; flex-wrap: wrap; }
+    .threshold-item { display: flex; align-items: center; gap: 6px; font-size: 0.72rem; color: var(--text-secondary); }
+    .threshold-dot  { width: 8px; height: 8px; border-radius: 50%; }
+
+    /* Servo visual */
+    .servo-visual { display: flex; align-items: center; justify-content: center; margin: 16px 0; position: relative; height: 80px; }
+    .servo-arm-container { position: relative; width: 80px; height: 80px; }
+    .servo-base   { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); width: 28px; height: 16px; background: rgba(255,255,255,0.1); border-radius: 4px; border: 1px solid var(--border-bright); }
+    .servo-pivot  { position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%); width: 12px; height: 12px; background: var(--accent-purple); border-radius: 50%; z-index: 2; }
+    .servo-arm    {
+      position: absolute; bottom: 28px; left: 50%;
+      width: 4px; height: 40px;
+      background: linear-gradient(to top, var(--accent-purple), var(--accent-cyan));
+      border-radius: 2px; transform-origin: bottom center;
+      transform: translateX(-50%) rotate(0deg);
+      transition: transform 0.8s cubic-bezier(0.34,1.56,0.64,1);
+    }
+    .servo-angle-label { text-align: center; font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: var(--accent-purple); margin-top: 4px; }
+
+    /* Flow bars */
+    .flow-bars { display: flex; align-items: flex-end; gap: 5px; height: 48px; margin-top: 16px; }
+    .flow-bar  { flex: 1; border-radius: 3px 3px 0 0; opacity: 0.6; transition: height 0.5s ease, opacity 0.5s; min-height: 4px; }
+
+    /* ── CHARTS ────────────────────────────────────── */
+    .charts-row { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; margin-bottom: 24px; }
+    @media (max-width: 900px) { .charts-row { grid-template-columns: 1fr; } }
+    .chart-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 24px; backdrop-filter: blur(20px); }
+    .chart-card-title { font-size: 0.78rem; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 16px; }
+    .chart-canvas-wrap { position: relative; height: 220px; }
+
+    /* ── SYSTEM LOG ────────────────────────────────── */
+    .log-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 24px; backdrop-filter: blur(20px); margin-bottom: 24px; }
+    .log-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+    .log-title  { font-size: 0.78rem; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.08em; }
+    .log-clear  { font-size: 0.72rem; color: var(--text-muted); cursor: pointer; background: none; border: none; text-decoration: underline; transition: color 0.2s; }
+    .log-clear:hover { color: var(--danger-color); }
+    .log-list { display: flex; flex-direction: column; gap: 4px; max-height: 180px; overflow-y: auto; font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; }
+    .log-list::-webkit-scrollbar { width: 4px; }
+    .log-list::-webkit-scrollbar-track { background: transparent; }
+    .log-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+    .log-entry { display: flex; gap: 12px; align-items: flex-start; padding: 6px 10px; border-radius: var(--radius-sm); background: rgba(255,255,255,0.02); animation: fadeSlideIn 0.3s ease; }
+    @keyframes fadeSlideIn { from{opacity:0;transform:translateX(-10px)} to{opacity:1;transform:translateX(0)} }
+    .log-time { color: var(--text-muted); flex-shrink: 0; }
+    .log-msg  { color: var(--text-secondary); }
+    .log-entry.log-danger .log-msg { color: var(--danger-color); }
+    .log-entry.log-warn   .log-msg { color: var(--warn-color); }
+    .log-entry.log-ok     .log-msg { color: var(--safe-color); }
+    .log-entry.log-info   .log-msg { color: var(--accent-cyan); }
+
+    /* ── SPECS ROW ─────────────────────────────────── */
+    .specs-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+    .spec-item { background: var(--glass); border: 1px solid var(--glass-border); border-radius: var(--radius-md); padding: 16px 20px; }
+    .spec-label { font-size: 0.68rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; }
+    .spec-value { font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; color: var(--text-primary); }
+
+    /* ── CARD ACCENT COLORS ────────────────────────── */
+    #rain-card     { --card-accent: linear-gradient(90deg,#3b82f6,#06b6d4); }
+    #level-card    { --card-accent: linear-gradient(90deg,#14b8a6,#06b6d4); }
+    #purifier-card { --card-accent: linear-gradient(90deg,#8b5cf6,#3b82f6); }
+    #flow-card     { --card-accent: linear-gradient(90deg,#22c55e,#14b8a6); }
+
+    @media (max-width: 640px) {
+      header { flex-direction: column; align-items: flex-start; }
+      .card-value { font-size: 2.2rem; }
+      .ws-config  { flex-wrap: wrap; }
+    }
+  </style>
+</head>
+<body>
+  <div class="bg-orbs" aria-hidden="true"></div>
+
+  <div class="wrapper">
+
+    <!-- HEADER -->
+    <header id="main-header">
+      <div class="header-left">
+        <div class="logo" aria-hidden="true">💧</div>
+        <div class="header-title">
+          <h1>IoT Drainage Monitor</h1>
+          <p>Roadside Water Drainage &amp; Purification System — ESP32 / PlatformIO</p>
+        </div>
+      </div>
+      <div class="header-right">
+        <div class="ws-config">
+          <input id="ws-ip-input" type="text" value="192.168.4.1" placeholder="ESP32 IP" aria-label="ESP32 WebSocket IP address" />
+          <button id="btn-connect" class="btn btn-primary" onclick="connectWebSocket()">Connect</button>
+          <button id="btn-demo"    class="btn btn-demo"    onclick="startDemo()">▶ Demo</button>
+        </div>
+        <span id="connection-badge" class="connection-badge disconnected">
+          <span class="status-dot" aria-hidden="true"></span>
+          <span id="connection-label">Disconnected</span>
+        </span>
+      </div>
+    </header>
+
+    <!-- BLOCKAGE ALERT BANNER -->
+    <div id="blockage-banner" class="alert-banner" role="alert" aria-live="assertive">
+      <span class="alert-icon" aria-hidden="true">⚠️</span>
+      <div class="alert-text">
+        <strong>⚡ Drainage Blockage Detected!</strong>
+        <p id="blockage-detail">High water level with abnormally low flow — possible obstruction in drainage system.</p>
+      </div>
+    </div>
+
+    <!-- SENSOR CARDS -->
+    <section class="cards-grid" aria-label="Sensor readings">
+
+      <!-- Rain -->
+      <article class="card" id="rain-card" aria-label="Rain status">
+        <div class="card-header">
+          <div class="card-title">Rain Status</div>
+          <div class="card-icon-wrap" aria-hidden="true">🌧️</div>
+        </div>
+        <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+          <div class="card-value" id="rain-value" style="font-size:1.9rem">—</div>
+          <span class="status-badge badge-neutral" id="rain-badge">–</span>
+        </div>
+        <div class="card-sub" id="rain-sub">Waiting for sensor data…</div>
+        <div class="rain-drops" id="rain-drops" aria-hidden="true">
+          <div class="rain-drop" style="height:24px"></div><div class="rain-drop" style="height:16px"></div>
+          <div class="rain-drop" style="height:32px"></div><div class="rain-drop" style="height:20px"></div>
+          <div class="rain-drop" style="height:28px"></div><div class="rain-drop" style="height:14px"></div>
+          <div class="rain-drop" style="height:22px"></div><div class="rain-drop" style="height:18px"></div>
+        </div>
+      </article>
+
+      <!-- Water Level -->
+      <article class="card" id="level-card" aria-label="Water level">
+        <div class="card-header">
+          <div class="card-title">Water Level</div>
+          <div class="card-icon-wrap" style="--icon-bg:rgba(20,184,166,0.12);--icon-border:rgba(20,184,166,0.3)" aria-hidden="true">📡</div>
+        </div>
+        <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">
+          <div class="card-value" id="level-value">—</div>
+          <span class="card-unit">cm</span>
+          <span class="status-badge badge-neutral" id="level-badge">–</span>
+        </div>
+        <div class="card-sub" id="level-sub">Distance from sensor to water surface</div>
+        <div class="level-gauge-wrap">
+          <div class="level-gauge-track"><div class="level-gauge-fill" id="level-fill"></div></div>
+          <div class="level-gauge-labels">
+            <span>Far / Dry</span>
+            <span id="danger-label">Danger ≤10cm</span>
+            <span>Flood Zone</span>
+          </div>
+        </div>
+        <div class="thresholds">
+          <div class="threshold-item">
+            <div class="threshold-dot" style="background:var(--safe-color)"></div>
+            <span id="safe-threshold">Safe &gt;20 cm</span>
+          </div>
+          <div class="threshold-item">
+            <div class="threshold-dot" style="background:var(--danger-color)"></div>
+            <span id="danger-threshold">Danger ≤10 cm</span>
+          </div>
+        </div>
+      </article>
+
+      <!-- Purifier Mechanism -->
+      <article class="card" id="purifier-card" aria-label="Purifier mechanism">
+        <div class="card-header">
+          <div class="card-title">Purifier Mechanism</div>
+          <div class="card-icon-wrap" style="--icon-bg:rgba(139,92,246,0.12);--icon-border:rgba(139,92,246,0.3)" aria-hidden="true">⚙️</div>
+        </div>
+        <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">
+          <div class="card-value" id="purifier-value" style="font-size:1.9rem">—</div>
+          <span class="status-badge badge-neutral" id="purifier-badge">–</span>
+        </div>
+        <div class="card-sub" id="purifier-sub">Servo-controlled drain valve</div>
+        <div class="servo-visual" aria-hidden="true">
+          <div class="servo-arm-container">
+            <div class="servo-arm" id="servo-arm"></div>
+            <div class="servo-pivot"></div>
+            <div class="servo-base"></div>
+          </div>
+        </div>
+        <div class="servo-angle-label" id="servo-angle-label">0°</div>
+      </article>
+
+      <!-- Water Flow -->
+      <article class="card" id="flow-card" aria-label="Water flow rate">
+        <div class="card-header">
+          <div class="card-title">Water Flow</div>
+          <div class="card-icon-wrap" style="--icon-bg:rgba(34,197,94,0.12);--icon-border:rgba(34,197,94,0.3)" aria-hidden="true">🌊</div>
+        </div>
+        <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">
+          <div class="card-value" id="flow-value">—</div>
+          <span class="card-unit">L/min</span>
+          <span class="status-badge badge-neutral" id="flow-badge">–</span>
+        </div>
+        <div class="card-sub" id="flow-sub">YF-S201 flow sensor reading</div>
+        <div class="flow-bars" id="flow-bars" aria-hidden="true"></div>
+      </article>
+
+    </section>
+
+    <!-- HISTORY CHARTS -->
+    <section class="charts-row" aria-label="Historical data">
+      <div class="chart-card">
+        <div class="chart-card-title">📈 Live History — Water Level &amp; Flow Rate</div>
+        <div class="chart-canvas-wrap">
+          <canvas id="history-chart" aria-label="Water level and flow rate history"></canvas>
+        </div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-card-title">🕐 Recent Event Summary</div>
+        <div class="chart-canvas-wrap">
+          <canvas id="event-chart" aria-label="Event summary chart"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- SYSTEM LOG -->
+    <section class="log-card" aria-label="System event log">
+      <div class="log-header">
+        <div class="log-title">📋 System Event Log</div>
+        <button class="log-clear" id="btn-clear-log" onclick="clearLog()">Clear log</button>
+      </div>
+      <div class="log-list" id="log-list" role="log" aria-live="polite"></div>
+    </section>
+
+    <!-- SPECS -->
+    <section class="specs-row" aria-label="System configuration">
+      <div class="spec-item"><div class="spec-label">Platform</div><div class="spec-value">ESP32 / PlatformIO</div></div>
+      <div class="spec-item"><div class="spec-label">WebSocket Port</div><div class="spec-value">:81</div></div>
+      <div class="spec-item"><div class="spec-label">Danger Threshold</div><div class="spec-value" id="spec-danger">≤ 10 cm</div></div>
+      <div class="spec-item"><div class="spec-label">Safe Threshold</div><div class="spec-value" id="spec-safe">&gt; 20 cm</div></div>
+      <div class="spec-item"><div class="spec-label">Flow Blockage Limit</div><div class="spec-value">0.5 L/min</div></div>
+      <div class="spec-item"><div class="spec-label">Broadcast Interval</div><div class="spec-value">2 seconds</div></div>
+    </section>
+
+  </div><!-- /wrapper -->
+
+  <script>
+    /* ═══ GLOBALS ═══════════════════════════════════════ */
+    let ws = null, demoInterval = null;
+    let demoTick = 0;
+    const MAX_HISTORY = 30;
+    const historyLabels = [], historyLevel = [], historyFlow = [];
+    const flowHistory = Array(12).fill(0);
+    let eventCounts = { safe:0, warning:0, danger:0, blockage:0 };
+    let lastState = {};
+
+    /* ═══ CHARTS ════════════════════════════════════════ */
+    const histChart = new Chart(
+      document.getElementById('history-chart').getContext('2d'), {
+      type: 'line',
+      data: {
+        labels: historyLabels,
+        datasets: [
+          { label:'Water Level (cm)', data:historyLevel, borderColor:'#06b6d4', backgroundColor:'rgba(6,182,212,0.08)', tension:0.4, fill:true, pointRadius:3, pointBackgroundColor:'#06b6d4', yAxisID:'y' },
+          { label:'Flow Rate (L/min)', data:historyFlow,  borderColor:'#22c55e', backgroundColor:'rgba(34,197,94,0.06)', tension:0.4, fill:true, pointRadius:3, pointBackgroundColor:'#22c55e', yAxisID:'y1' }
+        ]
+      },
+      options: {
+        responsive:true, maintainAspectRatio:false, animation:{duration:400},
+        plugins:{ legend:{ labels:{ color:'#94a3b8', font:{size:11,family:'Inter'}, boxWidth:12 } } },
+        scales: {
+          x: { ticks:{color:'#475569',font:{size:10},maxTicksLimit:8}, grid:{color:'rgba(255,255,255,0.04)'} },
+          y: { type:'linear', position:'left', title:{display:true,text:'cm',color:'#06b6d4',font:{size:10}}, ticks:{color:'#475569',font:{size:10}}, grid:{color:'rgba(255,255,255,0.04)'} },
+          y1:{ type:'linear', position:'right',title:{display:true,text:'L/min',color:'#22c55e',font:{size:10}}, ticks:{color:'#475569',font:{size:10}}, grid:{drawOnChartArea:false} }
+        }
+      }
+    });
+
+    const evtChart = new Chart(
+      document.getElementById('event-chart').getContext('2d'), {
+      type: 'doughnut',
+      data: {
+        labels: ['Safe','Warning','Danger','Blockage'],
+        datasets:[{ data:[1,0,0,0], backgroundColor:['rgba(34,197,94,0.7)','rgba(245,158,11,0.7)','rgba(239,68,68,0.7)','rgba(139,92,246,0.7)'], borderColor:['#22c55e','#f59e0b','#ef4444','#8b5cf6'], borderWidth:2, hoverOffset:8 }]
+      },
+      options:{ responsive:true, maintainAspectRatio:false, cutout:'65%', animation:{duration:500}, plugins:{ legend:{ position:'bottom', labels:{color:'#94a3b8',font:{size:11},padding:10,boxWidth:10} } } }
+    });
+
+    /* ═══ WEBSOCKET ═════════════════════════════════════ */
+    function connectWebSocket() {
+      if (demoInterval) { clearInterval(demoInterval); demoInterval = null; }
+      if (ws) { ws.close(); ws = null; }
+      const ip  = document.getElementById('ws-ip-input').value.trim() || '192.168.4.1';
+      const url = 'ws://' + ip + ':81/';
+      log('Connecting to ' + url + '…', 'info');
+      setBadge('connecting');
+      ws = new WebSocket(url);
+      ws.onopen    = () => { setBadge('connected');    log('WebSocket connected to ESP32', 'ok'); };
+      ws.onclose   = () => { setBadge('disconnected'); log('WebSocket disconnected', 'warn'); };
+      ws.onerror   = () => { setBadge('disconnected'); log('WebSocket error – check ESP32 IP and WiFi connection', 'danger'); };
+      ws.onmessage = (e) => { try { updateDashboard(JSON.parse(e.data)); } catch(err) { log('Parse error: ' + err.message, 'warn'); } };
+    }
+
+    /* ═══ DEMO MODE ═════════════════════════════════════ */
+    function startDemo() {
+      if (ws) { ws.close(); ws = null; }
+      if (demoInterval) clearInterval(demoInterval);
+      demoTick = 0;
+      setBadge('demo');
+      log('▶ Demo mode started — simulating realistic sensor data', 'info');
+      demoInterval = setInterval(() => {
+        demoTick++;
+        const phase = Math.floor(demoTick / 10) % 5;
+        let level, flow, rain, blockage = false;
+        switch(phase) {
+          case 0: level=45-demoTick%10*3+Math.random()*2; flow=1.5+Math.random(); rain=true; break;
+          case 1: level=7+Math.random()*3;  flow=4+Math.random()*2;   rain=true; break;
+          case 2: level=9+demoTick%10*2+Math.random()*2; flow=5+Math.random()*3; rain=true; break;
+          case 3: level=12+Math.random()*3; flow=0.1+Math.random()*0.3; rain=true; blockage=true; break;
+          case 4: level=32+Math.random()*10;flow=0.4+Math.random()*0.5; rain=false; break;
+          default:level=35; flow=1; rain=false;
+        }
+        level = Math.max(2, Math.min(60, level));
+        updateDashboard({
+          rain: rain,
+          waterLevelCm: parseFloat(level.toFixed(1)),
+          dangerCm: 10, safeCm: 20,
+          purifierOpen: level <= 10,
+          flowLPM: parseFloat(flow.toFixed(2)),
+          blockage: blockage,
+          levelStatus: level<=10 ? 'danger' : level<=20 ? 'warning' : 'safe',
+          flowStatus: blockage ? 'blocked' : 'normal',
+          timestamp: Date.now()
+        });
+      }, 2000);
+    }
+
+    /* ═══ DASHBOARD UPDATE ══════════════════════════════ */
+    function updateDashboard(d) {
+      /* ─ Rain ─ */
+      const rainEl = document.getElementById('rain-value');
+      const rainBadge = document.getElementById('rain-badge');
+      rainEl.textContent = d.rain ? '🌧 Rain' : '☀️ Clear';
+      rainEl.style.color = d.rain ? 'var(--accent-blue)' : 'var(--accent-yellow)';
+      rainBadge.textContent = d.rain ? 'DETECTED' : 'NO RAIN';
+      rainBadge.className = 'status-badge ' + (d.rain ? 'badge-info' : 'badge-safe');
+      document.getElementById('rain-sub').textContent = d.rain ? 'Rainfall detected by rain sensor' : 'No rainfall – road surface is dry';
+      const drops = document.getElementById('rain-drops').children;
+      for (let i=0; i<drops.length; i++) drops[i].style.opacity = d.rain ? (0.3+Math.random()*0.7).toFixed(2) : '0.08';
+      if (lastState.rain !== d.rain) { log(d.rain ? '🌧 Rain detected' : '☀️ Rain stopped – road clear', d.rain ? 'warn' : 'ok'); lastState.rain = d.rain; }
+
+      /* ─ Water Level ─ */
+      const levelEl = document.getElementById('level-value');
+      const levelBadge = document.getElementById('level-badge');
+      const levelCard  = document.getElementById('level-card');
+      levelEl.textContent = d.waterLevelCm >= 0 ? d.waterLevelCm.toFixed(1) : 'ERR';
+      const fillPct = Math.max(0, Math.min(100, ((60 - d.waterLevelCm) / 60) * 100));
+      document.getElementById('level-fill').style.width = fillPct + '%';
+      levelCard.classList.remove('state-danger','state-warning');
+      levelBadge.className = 'status-badge';
+      if (d.levelStatus === 'danger') {
+        levelBadge.textContent='⚠ DANGER'; levelBadge.classList.add('badge-danger');
+        levelEl.style.color='var(--danger-color)'; levelCard.classList.add('state-danger');
+        document.getElementById('level-sub').textContent='Water level is critically high – opening purifier!';
+      } else if (d.levelStatus === 'warning') {
+        levelBadge.textContent='WARNING'; levelBadge.classList.add('badge-warning');
+        levelEl.style.color='var(--warn-color)'; levelCard.classList.add('state-warning');
+        document.getElementById('level-sub').textContent='Water level is rising – monitor closely';
+      } else {
+        levelBadge.textContent='✔ SAFE'; levelBadge.classList.add('badge-safe');
+        levelEl.style.color='var(--safe-color)';
+        document.getElementById('level-sub').textContent='Water level within safe range';
+      }
+      document.getElementById('spec-danger').textContent = '≤ ' + d.dangerCm + ' cm';
+      document.getElementById('spec-safe').textContent   = '> ' + d.safeCm + ' cm';
+      document.getElementById('danger-label').textContent = 'Danger ≤' + d.dangerCm + 'cm';
+      document.getElementById('safe-threshold').textContent   = 'Safe >'  + d.safeCm + ' cm';
+      document.getElementById('danger-threshold').textContent = 'Danger ≤'+ d.dangerCm + ' cm';
+      if (lastState.levelStatus !== d.levelStatus) {
+        const m={safe:'✅ Water level safe',warning:'⚠️ Water level rising – warning zone',danger:'🚨 DANGER – critical water level!'};
+        const t={safe:'ok',warning:'warn',danger:'danger'};
+        log(m[d.levelStatus]||'Level change', t[d.levelStatus]||'info'); lastState.levelStatus = d.levelStatus;
+      }
+
+      /* ─ Purifier ─ */
+      const purEl = document.getElementById('purifier-value');
+      const purBadge = document.getElementById('purifier-badge');
+      const servoArm = document.getElementById('servo-arm');
+      const servoLbl = document.getElementById('servo-angle-label');
+      if (d.purifierOpen) {
+        purEl.textContent='🔓 OPEN'; purEl.style.color='var(--danger-color)';
+        purBadge.textContent='ACTIVE'; purBadge.className='status-badge badge-danger';
+        document.getElementById('purifier-sub').textContent='Drain valve open – purifier actively running';
+        servoArm.style.transform='translateX(-50%) rotate(-180deg)';
+        servoLbl.textContent='180°'; servoLbl.style.color='var(--danger-color)';
+      } else {
+        purEl.textContent='🔒 CLOSED'; purEl.style.color='var(--safe-color)';
+        purBadge.textContent='IDLE'; purBadge.className='status-badge badge-safe';
+        document.getElementById('purifier-sub').textContent='Drain valve closed – water level safe';
+        servoArm.style.transform='translateX(-50%) rotate(0deg)';
+        servoLbl.textContent='0°'; servoLbl.style.color='var(--accent-purple)';
+      }
+      if (lastState.purifierOpen !== d.purifierOpen) {
+        log(d.purifierOpen ? '🔓 Purifier OPENED – servo → 180°' : '🔒 Purifier CLOSED – servo → 0°', d.purifierOpen ? 'danger' : 'ok');
+        lastState.purifierOpen = d.purifierOpen;
+      }
+
+      /* ─ Flow ─ */
+      const flowEl = document.getElementById('flow-value');
+      const flowBadge = document.getElementById('flow-badge');
+      const flowCard  = document.getElementById('flow-card');
+      flowEl.textContent = d.flowLPM.toFixed(2);
+      flowCard.classList.remove('state-danger','state-warning');
+      flowBadge.className = 'status-badge';
+      if (d.flowStatus === 'blocked') {
+        flowBadge.textContent='🚫 BLOCKED'; flowBadge.classList.add('badge-danger');
+        flowEl.style.color='var(--danger-color)'; flowCard.classList.add('state-danger');
+        document.getElementById('flow-sub').textContent='Flow too low – possible drain blockage!';
+      } else {
+        flowBadge.textContent='✔ NORMAL'; flowBadge.classList.add('badge-safe');
+        flowEl.style.color='var(--safe-color)';
+        document.getElementById('flow-sub').textContent='Drainage flow operating normally';
+      }
+      flowHistory.push(d.flowLPM); if (flowHistory.length > 12) flowHistory.shift();
+      const maxF = Math.max(1, ...flowHistory);
+      document.getElementById('flow-bars').innerHTML = flowHistory
+        .map(f => '<div class="flow-bar" style="height:' + Math.max(6,(f/maxF)*100) + '%;background:' + (f < 0.5 ? 'var(--danger-color)' : 'var(--accent-green)') + ';opacity:' + (0.4+f/maxF*0.6).toFixed(2) + '"></div>')
+        .join('');
+      if (lastState.flowStatus !== d.flowStatus) {
+        log(d.flowStatus==='blocked' ? '🚫 Blockage detected! Flow critically low' : '✅ Flow restored to normal', d.flowStatus==='blocked' ? 'danger' : 'ok');
+        lastState.flowStatus = d.flowStatus;
+      }
+
+      /* ─ Blockage Banner ─ */
+      const banner = document.getElementById('blockage-banner');
+      if (d.blockage) {
+        banner.classList.add('visible');
+        document.getElementById('blockage-detail').textContent =
+          'Water: ' + d.waterLevelCm.toFixed(1) + ' cm (danger zone) | Flow: ' + d.flowLPM.toFixed(2) + ' L/min (threshold: 0.5 L/min) — inspect drain for obstruction.';
+      } else {
+        banner.classList.remove('visible');
+      }
+
+      /* ─ Charts ─ */
+      const tl = new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+      historyLabels.push(tl); historyLevel.push(d.waterLevelCm); historyFlow.push(d.flowLPM);
+      if (historyLabels.length > MAX_HISTORY) { historyLabels.shift(); historyLevel.shift(); historyFlow.shift(); }
+      histChart.update('active');
+
+      if (d.blockage) eventCounts.blockage++;
+      else if (d.levelStatus==='danger') eventCounts.danger++;
+      else if (d.levelStatus==='warning') eventCounts.warning++;
+      else eventCounts.safe++;
+      evtChart.data.datasets[0].data = [eventCounts.safe, eventCounts.warning, eventCounts.danger, eventCounts.blockage];
+      evtChart.update('active');
+    }
+
+    /* ═══ UTILITIES ═════════════════════════════════════ */
+    function setBadge(state) {
+      const b = document.getElementById('connection-badge');
+      const l = document.getElementById('connection-label');
+      b.className = 'connection-badge ' + state;
+      l.textContent = {connected:'Connected',disconnected:'Disconnected',connecting:'Connecting…',demo:'Demo Mode'}[state] || state;
+    }
+    function log(msg, type='info') {
+      const list = document.getElementById('log-list');
+      const now  = new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+      const el   = document.createElement('div');
+      el.className = 'log-entry log-' + type;
+      el.innerHTML = '<span class="log-time">' + now + '</span><span class="log-msg">' + msg + '</span>';
+      list.prepend(el);
+      while (list.children.length > 60) list.removeChild(list.lastChild);
+    }
+    function clearLog() { document.getElementById('log-list').innerHTML = ''; }
+
+    /* ─ Init ─ */
+    log('Dashboard ready — connect to ESP32 or click ▶ Demo for simulation', 'info');
+  </script>
+</body>
+</html>
