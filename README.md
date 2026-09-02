@@ -107,7 +107,7 @@ Blockage detection runs as an independent flag alongside this state machine:
 | Rain Sensor Module | Detects presence of rainfall |
 | Ultrasonic Sensor (HC-SR04) | Measures distance to water surface → derives water level |
 | Water Flow Sensor (YF-S201) | Measures flow rate through the drainage channel |
-| Servo Motor (MG99) | Actuates the purifier/drain mechanism |
+| Servo Motor (MG995) | Actuates the purifier/drain mechanism |
 | Power Supply | Stable 5V regulated supply for sensors and servo |
 | Enclosure | Weatherproof housing for roadside deployment |
 
