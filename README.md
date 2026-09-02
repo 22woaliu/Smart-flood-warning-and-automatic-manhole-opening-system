@@ -103,11 +103,11 @@ Blockage detection runs as an independent flag alongside this state machine:
 
 | Component | Purpose |
 |---|---|
-| Microcontroller (ESP32 / ESP8266) | Core processing + WiFi connectivity for IoT telemetry |
+| Microcontroller (ESP32) | Core processing + WiFi connectivity for IoT telemetry |
 | Rain Sensor Module | Detects presence of rainfall |
-| Ultrasonic Sensor (e.g., HC-SR04) | Measures distance to water surface → derives water level |
-| Water Flow Sensor (e.g., YF-S201) | Measures flow rate through the drainage channel |
-| Servo Motor (e.g., SG90/MG995) | Actuates the purifier/drain mechanism |
+| Ultrasonic Sensor (HC-SR04) | Measures distance to water surface → derives water level |
+| Water Flow Sensor (YF-S201) | Measures flow rate through the drainage channel |
+| Servo Motor (MG99) | Actuates the purifier/drain mechanism |
 | Power Supply | Stable 5V regulated supply for sensors and servo |
 | Enclosure | Weatherproof housing for roadside deployment |
 
@@ -141,8 +141,7 @@ Blockage detection runs as an independent flag alongside this state machine:
 
 2. **Clone the repository**
    ```bash
-   git clone https://github.com/<your-username>/<your-repo-name>.git
-   cd <your-repo-name>
+   git clone https://github.com/22woaliu/Smart-flood-warning-and-automatic-manhole-opening-system.git
    ```
 
 3. **Open in PlatformIO**
